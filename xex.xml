@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<xex>
+  
+  <format>
+    <compressed/>
+  </format>
+
+  <mediatypes>
+    <harddisk/>
+  </mediatypes>
+
+  <gameregion>
+    <all/>
+  </gameregion>
+  
+  <baseaddr addr = "0x88000000"/>
+
+</xex>
