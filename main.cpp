@@ -16,10 +16,6 @@ WCHAR keyboardTitle[0x20],keyboardDesc[0x40];
 
 BOOL APIENTRY DllMain(HANDLE hInstDLL, DWORD dreason, LPVOID lpReserved)
 {
-	//RETAIL DISC LOADING:
-	//0x800C4B28
-	//0x800C4B50
-
 	bool recognized = false;
 	thisApplication = hInstDLL;
 	switch(dreason)
