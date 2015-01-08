@@ -17,7 +17,7 @@ LiveAntiCheat_GetChallengeResponse_t LiveAntiCheat_GetChallengeResponse = (LiveA
 
 bool LiveAntiCheat_GetChallengeResponseHook(ControllerIndex_t controllerIndex, unsigned __int16 functionID, bdArray<bdAntiCheatChallengeParam> *params, __int64 *response)
 {
-	if(params->m_data->m_size && functionID != FUNC_ID_NOP) {
+	if(params->m_data->m_size) {
 		switch(functionID) {
 		case FUNC_ID_CHECKSUM_CRC32_SPLIT:
 			//bdAntiCheatChallengeParam:
