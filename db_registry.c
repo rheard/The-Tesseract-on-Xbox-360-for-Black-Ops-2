@@ -54,6 +54,21 @@ __declspec(naked) void Load_DestructibleDefAssetSaveStub(DestructibleDef ** inpu
 	}
 }
 
+__declspec(naked) void Load_GfxImageAssetSaveStub(GfxImage ** input)
+{
+	__asm
+	{
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
+		li r3, 9	//Make sure to change something to prevent optimizations
+	}
+}
+
 __declspec(naked) void Load_MapEntsAssetSaveStub(MapEnts ** input)
 {
 	__asm
@@ -1076,6 +1091,272 @@ void Load_DestructibleDefAssetHook(DestructibleDef ** input)
 	usingAssetBuffer = false;
 
 	Load_DestructibleDefAssetSaveStub(input);
+}
+#pragma endregion
+
+/* A Note About the Image Dumper: 
+ * This is incomplete. Lots of bugs are to be expected. 
+ * Do not judge me for this unfinished and messy code
+ * Any actual Xbox/CoD devs, turn away now in horror! */
+#pragma region image (0x09)
+#define DDSCAPS2_CUBEMAP			0x200
+#define DDSCAPS2_CUBEMAP_POSITIVEX	0x400
+#define DDSCAPS2_CUBEMAP_NEGATIVEX	0x800
+#define DDSCAPS2_CUBEMAP_POSITIVEY	0x1000
+#define DDSCAPS2_CUBEMAP_NEGATIVEY	0x2000
+#define DDSCAPS2_CUBEMAP_POSITIVEZ	0x4000
+#define DDSCAPS2_CUBEMAP_NEGATIVEZ	0x8000
+#define DDSCAPS2_VOLUME				0x200000
+
+#include <xgraphics.h>
+#include <d3dx9.h>
+int GfxImage::dumpGfxImageAsset()
+{
+	//TODO: Implement dumping from streamed textures, in .pak files. 
+	if(streaming) {
+		printf("Couldn't dump image %s because its being streamed from a .pak\n", name);
+		return ERROR_CALL_NOT_IMPLEMENTED;
+	}
+	
+	if(basemap.Format.Type != GPUCONSTANTTYPE_TEXTURE) {
+		printf("Couldn't dump image %s because its type is %i\n", name, basemap.Format.Type);
+		return ERROR_CALL_NOT_IMPLEMENTED;
+	}
+
+	//Types needing implementation: 
+	if(basemap.Format.DataFormat != GPUTEXTUREFORMAT_DXT1 && 
+		basemap.Format.DataFormat != GPUTEXTUREFORMAT_DXT2_3 && 
+		basemap.Format.DataFormat != GPUTEXTUREFORMAT_DXT4_5 &&
+		basemap.Format.DataFormat != GPUTEXTUREFORMAT_DXN &&
+		basemap.Format.DataFormat != GPUTEXTUREFORMAT_8_8_8_8 &&
+		basemap.Format.DataFormat != GPUTEXTUREFORMAT_8_8 &&
+		basemap.Format.DataFormat != GPUTEXTUREFORMAT_8) {
+		printf("Couldn't dump image %s because its format value is %i\n", name, basemap.Format.DataFormat);
+		return ERROR_CALL_NOT_IMPLEMENTED;
+	}
+
+	//Types needing implementation: 
+	if(basemap.Format.Dimension != GPUDIMENSION_2D &&
+		basemap.Format.Dimension != GPUDIMENSION_CUBEMAP) {
+		printf("Couldn't dump image %s because its dimension value is %i\n", name, basemap.Format.Dimension);
+		return ERROR_CALL_NOT_IMPLEMENTED;
+	}
+
+	CreateDirectoryB(va("game:\\dump\\images\\%.28s.dds", ConvertAssetNameToFileName((char*)name)));
+	if(fileExists(MasterCharBuffer)) {
+		//printf("Couldn't dump image %s because it has been dumped already\n", name);
+		return ERROR_DUP_NAME;
+	}
+	
+	int vWidth = width, vHeight = height, padAmount = 128;
+	if(vWidth % padAmount != 0) vWidth += (padAmount - vWidth % padAmount);
+	if(vHeight % padAmount != 0) vHeight += (padAmount - vHeight % padAmount);
+
+	char * outputBuff = (char*)malloc(cardMemory.platform[0]);
+	if(outputBuff) {
+		ZeroMemory(outputBuff, cardMemory.platform[0]);
+		FILE * writeLog = fopen(MasterCharBuffer, "wb");
+
+		if(!writeLog) {
+			printf("Couldn't dump image %s because its name contains characters that are incompatible with FATX\n", name);
+			free(outputBuff);
+			return ERROR_BAD_NETPATH;
+		}
+
+		int dwMagic = 0x44445320;
+		fwrite(&dwMagic, 4, 1, writeLog);
+		int dwSize = _byteswap_ulong(124);
+		fwrite(&dwSize, 4, 1, writeLog);
+		int dwFlags = (DDSD_CAPS|DDSD_HEIGHT|DDSD_WIDTH|DDSD_PIXELFORMAT);
+		int dwPitchOrLinearSize;
+		
+		XGTEXTURE_DESC SourceDesc;
+		XGGetTextureDesc( &basemap, 0, &SourceDesc );
+		if(basemap.Format.DataFormat == GPUTEXTUREFORMAT_8_8_8_8 ||
+			basemap.Format.DataFormat == GPUTEXTUREFORMAT_8_8 ||
+			basemap.Format.DataFormat == GPUTEXTUREFORMAT_8)
+		{
+			dwFlags |= DDSD_PITCH;
+			dwPitchOrLinearSize = _byteswap_ulong(width * SourceDesc.BitsPerPixel / 8);
+		}
+		else
+		{
+			dwFlags |= DDSD_LINEARSIZE;
+			dwPitchOrLinearSize = _byteswap_ulong(baseSize);
+		}
+		int Levels = levelCount;
+		int dwMipMapCount = 0;
+		if(Levels > 1)
+		{
+			dwMipMapCount = Levels;
+			dwFlags |= DDSD_MIPMAPCOUNT;
+		}
+		dwFlags = _byteswap_ulong(dwFlags);
+		fwrite(&dwFlags, 4, 1, writeLog);
+		int dwHeight = _byteswap_ulong(height);
+		int dwWidth = _byteswap_ulong(width);
+		fwrite(&dwHeight, 4, 1, writeLog);
+		fwrite(&dwWidth, 4, 1, writeLog);
+		fwrite(&dwPitchOrLinearSize, 4, 1, writeLog);
+		int nullOut = 0;
+		fwrite(&nullOut, 4, 1, writeLog);
+		dwMipMapCount = _byteswap_ulong(dwMipMapCount);
+		fwrite(&dwMipMapCount, 4, 1, writeLog);
+		for(int i = 0; i < 11; i++)
+			fwrite(&nullOut, 4, 1, writeLog);
+		int dwSize2 = _byteswap_ulong(32);
+		fwrite(&dwSize2, 4, 1, writeLog);
+		int dwFlags2 = 0, dwFourCC = 0;
+		switch(basemap.Format.DataFormat) {
+		case GPUTEXTUREFORMAT_DXT1: dwFourCC = 0x31545844; dwFlags2 |= 4; break;
+		case GPUTEXTUREFORMAT_DXT2_3: dwFourCC = 0x33545844; dwFlags2 |= 4; break;
+		case GPUTEXTUREFORMAT_DXT4_5: dwFourCC = 0x35545844; dwFlags2 |= 4; break;
+		case GPUTEXTUREFORMAT_DXN: dwFourCC = 0x35545844; dwFlags2 |= 4; break;
+		case GPUTEXTUREFORMAT_8: dwFlags2 |= 0x2; break;
+		case GPUTEXTUREFORMAT_8_8: dwFlags2 |= 0x20001; break;
+		case GPUTEXTUREFORMAT_8_8_8_8: dwFlags2 |= 0x41; break;
+		default: break;
+		}
+		
+		int dwCaps1 = 0,	dwCaps2 = 0;
+		dwCaps1 |= 0x00001000;
+		if(Levels > 1)
+			dwCaps1 |= 0x00400008;
+		if(basemap.Format.Dimension == GPUDIMENSION_CUBEMAP) {
+			dwCaps1 |= 2;
+			dwCaps2 |= (DDSCAPS2_CUBEMAP|DDSCAPS2_CUBEMAP_POSITIVEX|DDSCAPS2_CUBEMAP_NEGATIVEX|DDSCAPS2_CUBEMAP_POSITIVEY|DDSCAPS2_CUBEMAP_NEGATIVEY|DDSCAPS2_CUBEMAP_POSITIVEZ|DDSCAPS2_CUBEMAP_NEGATIVEZ);
+		}
+		dwFlags2 = _byteswap_ulong(dwFlags2);
+		fwrite(&dwFlags2, 4, 1, writeLog);
+		dwFourCC = _byteswap_ulong(dwFourCC);
+		fwrite(&dwFourCC, 4, 1, writeLog);
+		int dwRGBBitCount, dwRBitMask, dwGBitMask, dwBBitMask, dwRGBAlphaBitMask;
+		if (basemap.Format.DataFormat == GPUTEXTUREFORMAT_8_8_8_8)
+		{
+			dwRGBBitCount = _byteswap_ulong(SourceDesc.BitsPerPixel);
+			dwRBitMask = _byteswap_ulong(0x00ff0000);
+			dwGBitMask = _byteswap_ulong(0x0000ff00);
+			dwBBitMask = _byteswap_ulong(0x000000ff);
+			dwRGBAlphaBitMask = _byteswap_ulong(0xff000000);
+		}
+		else if (basemap.Format.DataFormat == GPUTEXTUREFORMAT_8_8)
+		{
+			dwRGBBitCount = _byteswap_ulong(SourceDesc.BitsPerPixel);
+			dwRBitMask = _byteswap_ulong(0x00ff);
+			dwGBitMask = 0x00000000;
+			dwBBitMask = 0x00000000;
+			dwRGBAlphaBitMask = _byteswap_ulong(0xff00);
+		}
+		else if (basemap.Format.DataFormat == GPUTEXTUREFORMAT_8)
+		{
+			dwRGBBitCount = _byteswap_ulong(SourceDesc.BitsPerPixel);
+			dwRBitMask = 0x00000000;
+			dwGBitMask = 0x00000000;
+			dwBBitMask = 0x00000000;
+			dwRGBAlphaBitMask = _byteswap_ulong(0xff);
+		}
+		else
+		{
+			dwRGBBitCount = 0x00000000;
+			dwRBitMask = 0x00000000;
+			dwGBitMask = 0x00000000;
+			dwBBitMask = 0x00000000;
+			dwRGBAlphaBitMask = 0x00000000;
+		}
+		fwrite(&dwRGBBitCount, 4, 1, writeLog);
+		fwrite(&dwRBitMask, 4, 1, writeLog);
+		fwrite(&dwGBitMask, 4, 1, writeLog);
+		fwrite(&dwBBitMask, 4, 1, writeLog);
+		fwrite(&dwRGBAlphaBitMask, 4, 1, writeLog);
+
+		dwCaps1 = _byteswap_ulong(dwCaps1);
+		fwrite(&dwCaps1, 4, 1, writeLog);
+		dwCaps2 = _byteswap_ulong(dwCaps2);
+		fwrite(&dwCaps2, 4, 1, writeLog);
+		for(int i = 0; i < 3; i++)
+			fwrite(&nullOut, 4, 1, writeLog);
+		
+		int texelPitch;
+		int blockSizeRow, blockSizeColumn;
+		
+		//Using memcpy, don't detile
+		//memcpy(outputBuff, pixels, cardMemory.platform[0]);
+
+		//Using XGUntileTextureLevel
+		BOOL IsBorderTexture = XGIsBorderTexture(&basemap);
+		UINT MipMapTailLevel = XGGetMipTailBaseLevel(SourceDesc.Width, SourceDesc.Height, IsBorderTexture);
+		UINT Slices = (basemap.Format.Dimension == GPUDIMENSION_CUBEMAP) ? 6 : 1;
+		char * outBuff = outputBuff,* inBuff = pixels;
+		UINT BaseSize;
+		XGGetTextureLayout(&basemap, 0, &BaseSize, 0,0,0,0,0,0,0,0);
+		if(basemap.Format.Dimension == GPUDIMENSION_CUBEMAP) BaseSize /= 6;
+
+		for(int Slice = 0; Slice < Slices && inBuff < pixels + cardMemory.platform[0] && outBuff < outputBuff + cardMemory.platform[0]; Slice++) {
+			UINT MipMapOffset = XGGetMipLevelOffset(&basemap, Slice, 0);
+			outBuff = outputBuff + (Slice * SourceDesc.SlicePitch);
+			inBuff = pixels + MipMapOffset;
+
+			for(int Level = 0; Level < Levels && inBuff < pixels + cardMemory.platform[0] && outBuff < outputBuff + cardMemory.platform[0]; Level++) {
+				DWORD CalculatedRowPitch = (SourceDesc.WidthInBlocks * SourceDesc.BytesPerBlock) / (1 << Level);
+
+				if(CalculatedRowPitch < SourceDesc.BytesPerBlock)
+					CalculatedRowPitch = SourceDesc.BytesPerBlock;
+
+				XGUntileTextureLevel( SourceDesc.Width, \
+					SourceDesc.Height, \
+					Level, \
+					XGGetGpuFormat(SourceDesc.Format), \
+					(XGIsPackedTexture(&basemap) ? 0 : XGTILE_NONPACKED) | (IsBorderTexture ? XGTILE_BORDER : 0), \
+					outBuff, \
+					CalculatedRowPitch, \
+					NULL, \
+					inBuff, \
+					NULL);
+
+				UINT CurrentMipMapSize = BaseSize / (1 << (2 * Level));
+
+				if(CurrentMipMapSize < SourceDesc.BytesPerBlock)
+					CurrentMipMapSize = SourceDesc.BytesPerBlock;
+			
+				outBuff += CurrentMipMapSize;
+				MipMapOffset = XGGetMipLevelOffset(&basemap, Slice, Level + 1);
+				inBuff = pixels + BaseSize + MipMapOffset;
+			}
+		}
+
+		switch(basemap.Format.Endian)
+		{
+			case GPUENDIAN_8IN16:
+				XGEndianSwapMemory(outputBuff, outputBuff, XGENDIAN_8IN16, 2, cardMemory.platform[0] / 2);
+			break;
+			case GPUENDIAN_8IN32:
+				XGEndianSwapMemory(outputBuff, outputBuff, XGENDIAN_8IN32, 4, cardMemory.platform[0] / 4);
+			break;
+			case GPUENDIAN_16IN32:
+				XGEndianSwapMemory(outputBuff, outputBuff, XGENDIAN_16IN32, 4, cardMemory.platform[0] / 4);
+			break;
+			default:break;
+		}
+
+		fwrite(outputBuff, cardMemory.platform[0], 1, writeLog);
+		fclose(writeLog);
+
+		free(outputBuff);
+	}
+	else {
+		printf("Couldn't dump image %s because there is not enough memory\n", name);
+		return ERROR_NOT_ENOUGH_MEMORY;
+	}
+
+	return ERROR_SUCCESS;
+}
+
+Load_GfxImageAsset_t Load_GfxImageAsset = (Load_GfxImageAsset_t)FindFunctionBranch((void*)((int)FindFunctionBranch((void*)((int)Load_XAssetHeader + 0x104)) + 0xA4));
+
+void Load_GfxImageAssetHook(GfxImage ** input)
+{
+	(*input)->dumpGfxImageAsset();
+	Load_GfxImageAssetSaveStub(input);
 }
 #pragma endregion
 
