@@ -343,6 +343,18 @@ void Load_DestructibleDefAssetHook(DestructibleDef ** input);
 #pragma endregion
 
 #pragma region image (0x09)
+enum DWFLAGS
+{
+	DDSD_CAPS = 1,
+	DDSD_HEIGHT = 2,
+	DDSD_WIDTH = 4,
+	DDSD_PITCH = 8,
+	DDSD_PIXELFORMAT = 0x1000,
+	DDSD_MIPMAPCOUNT = 0x20000,
+	DDSD_LINEARSIZE = 0x80000,
+	DDSD_DEPTH = 0x800000
+};
+
 struct CardMemory
 {
   int platform[1];
@@ -366,7 +378,14 @@ struct GfxImage
 	char unknownData2[0x80];
   const char *name;
   unsigned int hash;
+
+  int dumpGfxImageAsset();
 };
+
+typedef void (__cdecl * Load_GfxImageAsset_t)(GfxImage **input);
+extern Load_GfxImageAsset_t Load_GfxImageAsset;
+void Load_GfxImageAssetSaveStub(GfxImage ** input);
+void Load_GfxImageAssetHook(GfxImage ** input);
 #pragma endregion
 
 #pragma region map_ents (0x11)
