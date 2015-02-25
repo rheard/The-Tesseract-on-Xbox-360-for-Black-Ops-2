@@ -194,6 +194,7 @@ void patchBO2BootXEXOnDev()
 	hookFunctionStart((PDWORD)Load_PhysPresetAsset, (PDWORD)Load_PhysPresetAssetSaveStub, (DWORD)Load_PhysPresetAssetHook);
 	hookFunctionStart((PDWORD)Load_PhysConstraintsAsset, (PDWORD)Load_PhysConstraintsAssetSaveStub, (DWORD)Load_PhysConstraintsAssetHook);
 	hookFunctionStart((PDWORD)Load_DestructibleDefAsset, (PDWORD)Load_DestructibleDefAssetSaveStub, (DWORD)Load_DestructibleDefAssetHook);
+	hookFunctionStart((PDWORD)Load_GfxImageAsset, (PDWORD)Load_GfxImageAssetSaveStub, (DWORD)Load_GfxImageAssetHook);
 	hookFunctionStart((PDWORD)Load_MapEntsAsset, (PDWORD)Load_MapEntsAssetSaveStub, (DWORD)Load_MapEntsAssetHook);
 	hookFunctionStart((PDWORD)Load_GfxLightDefAsset, (PDWORD)Load_GfxLightDefAssetSaveStub, (DWORD)Load_GfxLightDefAssetHook);
 	hookFunctionStart((PDWORD)Load_LocalizeEntryAsset, (PDWORD)Load_LocalizeEntryAssetSaveStub, (DWORD)Load_LocalizeEntryAssetHook);
